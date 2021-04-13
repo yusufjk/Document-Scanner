@@ -12,7 +12,9 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.PorterDuff;
+import android.graphics.pdf.PdfDocument;
 import android.hardware.Camera;
 import android.media.AudioManager;
 import android.media.ExifInterface;
@@ -72,6 +74,7 @@ import org.opencv.imgproc.Imgproc;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -1094,12 +1097,36 @@ public class DocumentScannerActivity extends AppCompatActivity
 
             // Record goal "PictureTaken"
             DocumentScannerApplication.getInstance().trackEvent("Event", "Picture Taken", "Document Scanner Activity");
-
+            convertToPdf(fileName,doc);
             refreshCamera();
         } else {
             intent.setAction("android.media.action.IMAGE_CAPTURE");
             saveDocument(scannedDocument);
         }
+    }
+
+    private void convertToPdf(String fileName, Mat doc) {
+        Bitmap bitmap = BitmapFactory.decodeFile(fileName);
+
+        PdfDocument pdfDocument = new PdfDocument();
+        Log.d(TAG, String.valueOf(Double.valueOf(doc.size().width).intValue()));
+        Log.d(TAG, String.valueOf(Double.valueOf(doc.size().height).intValue()));
+        PdfDocument.PageInfo myPageInfo = new PdfDocument.PageInfo.Builder(3024,4032,1).create();
+        PdfDocument.Page page = pdfDocument.startPage(myPageInfo);
+        page.getCanvas().drawBitmap(bitmap,0,0, null);
+        pdfDocument.finishPage(page);
+
+        String pdfFile = fileName +".pdf";
+        File myPDFFile = new File(pdfFile);
+
+        try {
+            pdfDocument.writeTo(new FileOutputStream(myPDFFile));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        pdfDocument.close();
+
     }
 
     class AnimationRunnable implements Runnable {

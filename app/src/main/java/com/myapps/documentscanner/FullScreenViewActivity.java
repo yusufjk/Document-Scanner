@@ -198,8 +198,8 @@ public class FullScreenViewActivity extends AppCompatActivity {
         int item = pager.getCurrentItem();
 
         final Intent shareIntent = new Intent(Intent.ACTION_SEND);
-        shareIntent.setType("image/jpg");
-        final File photoFile = new File(mAdapter.getPath(item));
+        shareIntent.setType("application/pdf");
+        final File photoFile = new File(mAdapter.getPath(item)+".pdf");
         shareIntent.putExtra(Intent.EXTRA_STREAM, Uri.fromFile(photoFile));
         Log.d("Fullscreen","uri "+Uri.fromFile(photoFile));
         startActivity(Intent.createChooser(shareIntent, getString(R.string.share_snackbar)));

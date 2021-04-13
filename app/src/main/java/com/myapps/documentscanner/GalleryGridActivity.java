@@ -305,12 +305,12 @@ public class GalleryGridActivity extends AppCompatActivity
     public void shareImages() {
 
         final Intent shareIntent = new Intent(Intent.ACTION_SEND_MULTIPLE);
-        shareIntent.setType("image/jpg");
+        shareIntent.setType("application/pdf");
 
         ArrayList<Uri> filesUris = new ArrayList<>();
 
         for (String i : myThumbAdapter.getSelectedFiles() ) {
-            filesUris.add(Uri.parse("file://" + i));
+            filesUris.add(Uri.parse("file://" + i+".pdf"));
         }
         shareIntent.putParcelableArrayListExtra(Intent.EXTRA_STREAM, filesUris);
 
