@@ -5,6 +5,7 @@ import android.annotation.SuppressLint;
 import android.app.ActionBar;
 import android.app.AlertDialog;
 import android.app.Dialog;
+import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -28,7 +29,7 @@ import android.os.HandlerThread;
 import android.os.Message;
 import android.preference.PreferenceManager;
 import android.provider.MediaStore;
-import android.support.annotation.Nullable;
+import android.support.annotation.NonNull;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.NavigationView;
 import android.support.v4.app.ActivityCompat;
@@ -55,7 +56,21 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.github.fafaldo.fabtoolbar.widget.FABToolbarLayout;
+import com.google.android.gms.auth.api.signin.GoogleSignIn;
+import com.google.android.gms.auth.api.signin.GoogleSignInClient;
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
+import com.google.android.gms.common.api.Scope;
+import com.google.android.gms.drive.Drive;
+import com.google.android.gms.drive.DriveClient;
+import com.google.android.gms.drive.DriveResourceClient;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.api.client.extensions.android.http.AndroidHttp;
+import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential;
+import com.google.api.client.json.gson.GsonFactory;
+import com.google.api.services.drive.DriveScopes;
 import com.myapps.documentscanner.helpers.DocumentMessage;
+import com.myapps.documentscanner.helpers.DriveServiceHelper;
 import com.myapps.documentscanner.helpers.PreviewFrame;
 import com.myapps.documentscanner.helpers.ScannedDocument;
 import com.myapps.documentscanner.views.HUDCanvasView;
@@ -79,10 +94,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.text.SimpleDateFormat;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
-
-import com.google.android.gms.common.api.CommonStatusCodes;
 
 import static com.myapps.documentscanner.helpers.Utils.addImageToGallery;
 import static com.myapps.documentscanner.helpers.Utils.decodeSampledBitmapFromUri;
@@ -110,9 +124,18 @@ public class DocumentScannerActivity extends AppCompatActivity
 
     public boolean widgetCameraIntent = false;
     public boolean widgetOCRIntent = false;
+    private static final int REQUEST_CODE_SIGN_IN = 0;
+    private static final int REQUEST_CODE_CAPTURE_IMAGE = 1;
+    private static final int REQUEST_CODE_CREATOR = 2;
 
+    private GoogleSignInClient mGoogleSignInClient;
+    private DriveClient mDriveClient;
+    private DriveResourceClient mDriveResourceClient;
+    private Bitmap mBitmapToSave;
     private final Handler mHideHandler = new Handler();
     private View mContentView;
+    private DriveServiceHelper driveServiceHelper;
+    private String fileToUpload = "";
     private final Runnable mHidePart2Runnable = new Runnable() {
         @SuppressLint("InlinedApi")
         @Override
@@ -426,7 +449,7 @@ public class DocumentScannerActivity extends AppCompatActivity
                 Intent widgetOCRData = getIntent();
                 if (widgetOCRData != null) {
                     statusMessage.setText(R.string.ocr_success);
-                }else {
+                } else {
                     statusMessage.setText(R.string.ocr_failure);
                     Log.d(TAG, "No Text captured, intent data is null");
                 }
@@ -1097,7 +1120,11 @@ public class DocumentScannerActivity extends AppCompatActivity
 
             // Record goal "PictureTaken"
             DocumentScannerApplication.getInstance().trackEvent("Event", "Picture Taken", "Document Scanner Activity");
-            convertToPdf(fileName,doc);
+            convertToPdf(fileName, doc);
+            fileToUpload = fileName;
+            waitSpinnerVisible();
+            signIn();
+            waitSpinnerInvisible();
             refreshCamera();
         } else {
             intent.setAction("android.media.action.IMAGE_CAPTURE");
@@ -1111,12 +1138,12 @@ public class DocumentScannerActivity extends AppCompatActivity
         PdfDocument pdfDocument = new PdfDocument();
         Log.d(TAG, String.valueOf(Double.valueOf(doc.size().width).intValue()));
         Log.d(TAG, String.valueOf(Double.valueOf(doc.size().height).intValue()));
-        PdfDocument.PageInfo myPageInfo = new PdfDocument.PageInfo.Builder(3024,4032,1).create();
+        PdfDocument.PageInfo myPageInfo = new PdfDocument.PageInfo.Builder(3024, 4032, 1).create();
         PdfDocument.Page page = pdfDocument.startPage(myPageInfo);
-        page.getCanvas().drawBitmap(bitmap,0,0, null);
+        page.getCanvas().drawBitmap(bitmap, 0, 0, null);
         pdfDocument.finishPage(page);
 
-        String pdfFile = fileName +".pdf";
+        String pdfFile = fileName + ".pdf";
         File myPDFFile = new File(pdfFile);
 
         try {
@@ -1181,7 +1208,6 @@ public class DocumentScannerActivity extends AppCompatActivity
                 double documentHeight = Math.max(documentLeftHeight, documentRightHeight);
 
                 Log.d(TAG, "device: " + width + "x" + height + " image: " + imageWidth + "x" + imageHeight + " document: " + documentWidth + "x" + documentHeight);
-
 
 
                 Log.d(TAG, "previewPoints[0] x=" + previewPoints[0].x + " y=" + previewPoints[0].y);
@@ -1268,6 +1294,98 @@ public class DocumentScannerActivity extends AppCompatActivity
             }
         }
     }
+
+    /**
+     * Start sign in activity.
+     */
+    private void signIn() {
+        Log.i(TAG, "Start sign in");
+        mGoogleSignInClient = buildGoogleSignInClient();
+        startActivityForResult(mGoogleSignInClient.getSignInIntent(), REQUEST_CODE_SIGN_IN);
+    }
+
+    /**
+     * Build a Google SignIn client.
+     */
+    private GoogleSignInClient buildGoogleSignInClient() {
+        GoogleSignInOptions signInOptions =
+                new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                        .requestEmail()
+                        .requestScopes(new Scope(DriveScopes.DRIVE_FILE))
+                        .build();
+        return GoogleSignIn.getClient(this, signInOptions);
+    }
+
+    /**
+     * Handles the {@code result} of a completed sign-in activity initiated from {@link
+     */
+    private void handleSignInResult(Intent result) {
+        GoogleSignIn.getSignedInAccountFromIntent(result)
+                .addOnSuccessListener(googleAccount -> {
+                    Log.d(TAG, "Signed in as " + googleAccount.getEmail());
+                    // Use the authenticated account to sign in to the Drive service.
+                    GoogleAccountCredential credential =
+                            GoogleAccountCredential.usingOAuth2(
+                                    this, Collections.singleton(DriveScopes.DRIVE_FILE));
+                    credential.setSelectedAccount(googleAccount.getAccount());
+                    com.google.api.services.drive.Drive googleDriveService =
+                            new com.google.api.services.drive.Drive.Builder(
+                                    AndroidHttp.newCompatibleTransport(),
+                                    new GsonFactory(),
+                                    credential)
+                                    .setApplicationName("Scannerify")
+                                    .build();
+
+                    // The DriveServiceHelper encapsulates all REST API and SAF functionality.
+                    // Its instantiation is required before handling any onClick actions.
+                    driveServiceHelper = new DriveServiceHelper(googleDriveService,this);
+                    saveFileToDrive(fileToUpload);
+                })
+                .addOnFailureListener(exception -> Log.e(TAG, "Unable to sign in.", exception));
+    }
+
+    /**
+     * Create a new file and save it to Drive.
+     */
+    private void saveFileToDrive(String filePath) {
+        ProgressDialog progressDialog = new ProgressDialog(DocumentScannerActivity.this);
+        progressDialog.setTitle("Uploading file to Google Drive");
+        progressDialog.setMessage("Please wait ...");
+        progressDialog.show();
+
+        driveServiceHelper.uploadDocument(filePath).addOnSuccessListener(new OnSuccessListener<String>() {
+            @Override
+            public void onSuccess(String s) {
+                progressDialog.dismiss();
+                Toast.makeText(getApplicationContext(), "Uploaded successfully", Toast.LENGTH_LONG).show();
+            }
+        }).addOnFailureListener(new OnFailureListener() {
+            @Override
+            public void onFailure(@NonNull Exception e) {
+                progressDialog.dismiss();
+                e.printStackTrace();
+                Toast.makeText(getApplicationContext(), "An error occurred while uploading file to google drive", Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+
+    @Override
+    protected void onActivityResult(final int requestCode, final int resultCode, final Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_CODE_SIGN_IN) {
+            Log.i(TAG, "Sign in request code");
+            // Called after user is signed in.
+            if (resultCode == RESULT_OK) {
+                Log.i(TAG, "Signed in successfully.");
+                // Use the last signed in account here since it already have a Drive scope.
+                handleSignInResult(data);
+                mDriveClient = Drive.getDriveClient(this, GoogleSignIn.getLastSignedInAccount(this));
+                mDriveResourceClient = Drive.getDriveResourceClient(this, GoogleSignIn.getLastSignedInAccount(this));
+            }
+        }
+    }
+
 
     @Override
     public boolean onNavigationItemSelected(MenuItem item) {

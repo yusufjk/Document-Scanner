@@ -17,6 +17,10 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
     splits {
 
         // Configures multiple APKs based on ABI.
@@ -39,6 +43,17 @@ android {
         }
     }
 
+    packagingOptions {
+        exclude 'META-INF/DEPENDENCIES'
+        exclude 'META-INF/LICENSE'
+        exclude 'META-INF/LICENSE.txt'
+        exclude 'META-INF/license.txt'
+        exclude 'META-INF/NOTICE'
+        exclude 'META-INF/NOTICE.txt'
+        exclude 'META-INF/notice.txt'
+        exclude 'META-INF/ASL2.0'
+        exclude("META-INF/*.kotlin_module")
+    }
 }
 
 // Map for the version code that gives each ABI a value.
@@ -93,12 +108,15 @@ dependencies {
     compile 'com.afollestad:drag-select-recyclerview:0.3.6'
     compile 'com.github.nostra13:Android-Universal-Image-Loader:v1.9.5'
     compile 'com.github.fafaldo:fab-toolbar:1.2.0'
-    compile 'com.google.android.gms:play-services-analytics:9.2.1'
-    compile 'com.google.android.gms:play-services-vision:9.2.1'
-    compile 'com.google.android.gms:play-services-appindexing:9.2.1'
-    compile 'com.google.api-client:google-api-client:1.23.0'
+    compile 'com.google.android.gms:play-services-analytics:11.6.0'
+    compile 'com.google.firebase:firebase-appindexing:11.6.0'
+    compile 'com.google.android.gms:play-services-vision:11.6.0'
+    compile 'com.google.api-client:google-api-client-android:1.26.0'
     compile 'com.google.oauth-client:google-oauth-client-jetty:1.23.0'
     compile 'com.google.apis:google-api-services-drive:v3-rev110-1.23.0'
+    compile 'com.google.android.gms:play-services-auth:11.6.0'
+    compile 'com.google.android.gms:play-services-drive:11.6.0'
+    compile 'com.google.http-client:google-http-client-gson:1.26.0'
     compile project(':openCVLibrary310')
 }
 
